@@ -53,11 +53,39 @@ docker compose up --build
 | Monolito (health) | http://localhost:3001/health |
 | Chat (health) | http://localhost:3002/health |
 | RabbitMQ UI | http://localhost:15672 |
+| Swagger (API del monolito) | http://localhost:3001/api |
+
+## API del monolito
+
+El esquema de PostgreSQL lo crean las migraciones de TypeORM al arrancar (nunca `synchronize`).
+
+| Método y ruta | Quién | Qué hace |
+|---|---|---|
+| `POST /auth/register` | público | Registro como `player` (por defecto) u `owner`. No se puede elegir `admin` |
+| `POST /auth/login` | público | Devuelve `accessToken` (JWT) y los datos del usuario |
+| `GET /auth/me` | autenticado | Datos del usuario del token |
+| `GET /venues` | público | Búsqueda por `zone`, `sport`, `maxPrice`, con paginación (`page`, `limit`) |
+| `GET /venues/:id` | público | Detalle de un local con sus canchas activas |
+| `GET /venues/mine` | dueño | Mis locales con todas sus canchas |
+| `POST /venues` | dueño | Crear local |
+| `PATCH /venues/:id`, `DELETE /venues/:id` | dueño del local o admin | Editar o borrar |
+| `POST /venues/:id/courts` | dueño del local o admin | Agregar cancha |
+| `PATCH /courts/:id`, `DELETE /courts/:id` | dueño del local o admin | Editar, desactivar o borrar |
+
+El JWT lleva `sub` (id del usuario), `email` y `role`, y lo firma el monolito con `JWT_SECRET`. El chat-service valida ese mismo token con el mismo secreto.
+
+### Tests y migraciones
+
+```bash
+docker compose exec backend npm test                       # tests unitarios
+docker compose exec backend npm run migration:run          # aplicar migraciones a mano
+docker compose exec backend npm run migration:generate -- src/database/migrations/NombreCambio
+```
 
 ## Roadmap
 
 - [x] Fase 0: esqueleto del repo e infraestructura
-- [ ] Fase 1: auth, roles y modelo de datos
+- [x] Fase 1: auth, roles y modelo de datos
 - [ ] Fase 2: catálogo y reservas (tests de concurrencia)
 - [ ] Fase 3: pagos (sandbox) y reseñas
 - [ ] Fase 4: chat en tiempo real y eventos por RabbitMQ
