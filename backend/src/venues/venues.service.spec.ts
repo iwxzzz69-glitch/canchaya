@@ -1,6 +1,7 @@
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Repository } from 'typeorm';
 import { AuthUser } from '../auth/auth-user';
+import { Review } from '../reviews/review.entity';
 import { Role } from '../users/role.enum';
 import { Court } from './court.entity';
 import { Venue } from './venue.entity';
@@ -26,6 +27,7 @@ describe('VenuesService (permisos)', () => {
     service = new VenuesService(
       venues as unknown as Repository<Venue>,
       courts as unknown as Repository<Court>,
+      {} as Repository<Review>,
     );
   });
 

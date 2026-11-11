@@ -70,24 +70,67 @@ El esquema de PostgreSQL lo crean las migraciones de TypeORM al arrancar (nunca 
 | `POST /venues` | dueño | Crear local |
 | `PATCH /venues/:id`, `DELETE /venues/:id` | dueño del local o admin | Editar o borrar |
 | `POST /venues/:id/courts` | dueño del local o admin | Agregar cancha |
-| `PATCH /courts/:id`, `DELETE /courts/:id` | dueño del local o admin | Editar, desactivar o borrar |
+| `PATCH /courts/:id`, `DELETE /courts/:id` | dueño del local o admin | Editar (incluido su horario `openHour`/`closeHour`), desactivar o borrar. Una cancha o local con reservas no se borra (409): se desactiva |
+| `GET /courts/:id/availability?date=YYYY-MM-DD` | público | Turnos de una hora de esa fecha, con `available` true/false |
+| `POST /bookings` | jugador o dueño | Reserva `hours` (1 a 3) desde `startsAt`. Nace `pending` y bloquea el horario 10 min |
+| `POST /bookings/:id/pay` | el jugador de la reserva | Cobra con `{ tokenId }` (token de tarjeta `tkn_…`). Si sale bien, la reserva queda `confirmed`. Rechazo → `402`; reserva vencida o ya pagada → `409`; pasarela caída → `503` |
+| `POST /bookings/:id/cancel` | jugador, dueño del local o admin | Cancela y, si estaba pagada, devuelve el dinero (`refund`: `none`, `refunded` o `failed`). El jugador solo hasta 2 h antes si ya estaba confirmada |
+| `GET /bookings/mine` | jugador o dueño | Mis reservas con su cancha y local |
+| `GET /venues/:id/bookings?date=` | dueño del local o admin | Agenda del local (nombre del jugador, sin datos de contacto) |
+| `GET /payments/mine` | jugador o dueño | Mis pagos con su reserva |
+| `POST /payments/:id/retry-refund` | admin | Reintenta una devolución que la pasarela rechazó |
+| `POST /payments/webhooks/culqi/:secret` | Culqi | Concilia cobros cuya respuesta se perdió (el secreto va en la URL) |
+| `POST /bookings/:id/review` | jugador de la reserva | Reseña (`rating` 1-5, `comment` opcional). Solo reservas confirmadas que ya terminaron, una por reserva |
+| `GET /venues/:id/reviews` | público | Reseñas con promedio y total (solo el primer nombre del autor) |
+| `DELETE /reviews/:id` | autor o admin | Borra una reseña |
+
+`GET /venues` y `GET /venues/:id` incluyen `rating: { average, count }`.
 
 El JWT lleva `sub` (id del usuario), `email` y `role`, y lo firma el monolito con `JWT_SECRET`. El chat-service valida ese mismo token con el mismo secreto.
+
+### Cómo se evita la doble reserva
+
+No hay "consultar y luego insertar". La tabla `bookings` tiene una restricción de exclusión de PostgreSQL
+que impide que dos reservas activas de la misma cancha tengan horarios que se solapen; si dos peticiones
+llegan a la vez, la base de datos deja pasar una y la otra recibe un `409`. Los bloqueos de pago que vencen
+sin confirmarse liberan el horario solos. Detalle y alternativas descartadas en el
+[ADR 0002](docs/adr/0002-evitar-doble-reserva-con-restriccion-de-exclusion.md).
+
+Horarios: los locales operan en hora de Lima (UTC-5); las fechas se guardan en UTC y `startsAt` debe
+llevar zona horaria (ej. `2026-11-14T20:00:00-05:00`).
+
+### Pagos
+
+Los pagos pasan por una interfaz (`PaymentProvider`) con dos implementaciones: **Culqi** y una **pasarela
+simulada** que se usa si no hay `CULQI_SECRET_KEY` (nunca en producción). Con la simulada, el token decide el
+resultado: `tkn_test_ok`, `tkn_test_declined`, `tkn_test_insufficient_funds`, `tkn_test_unavailable` y
+`tkn_test_charged_then_unavailable`. Un solo cobro por reserva lo garantiza un índice único parcial de la base
+de datos; si la pasarela cobra pero la respuesta se pierde, el webhook lo concilia. Detalle en el
+[ADR 0003](docs/adr/0003-pagos-con-pasarela-abstracta-e-idempotencia.md).
+
+Variables: `PAYMENT_PROVIDER` (`culqi`/`fake`), `CULQI_SECRET_KEY`, `CULQI_PUBLIC_KEY`, `CULQI_API_URL`,
+`CULQI_WEBHOOK_SECRET`, `PAYMENT_GRACE_SECONDS` (ver `.env.example`).
 
 ### Tests y migraciones
 
 ```bash
-docker compose exec backend npm test                       # tests unitarios
+docker compose exec backend npm test                       # unitarios + concurrencia contra PostgreSQL
 docker compose exec backend npm run migration:run          # aplicar migraciones a mano
 docker compose exec backend npm run migration:generate -- src/database/migrations/NombreCambio
 ```
+
+Los tests de integración (`*.concurrency.spec.ts`, `*.flow.spec.ts`) corren contra PostgreSQL real: el de
+concurrencia dispara decenas de reservas simultáneas por el mismo horario y comprueba que solo una gana; el de
+pagos cubre doble clic, rechazos, pasarela caída, webhook y devoluciones; el de reseñas, sus reglas. Cada archivo
+crea y borra su propia base `canchaya_test_*` en el mismo servidor, sin tocar tus datos, y se omite si no hay
+`DATABASE_URL`.
 
 ## Roadmap
 
 - [x] Fase 0: esqueleto del repo e infraestructura
 - [x] Fase 1: auth, roles y modelo de datos
-- [ ] Fase 2: catálogo y reservas (tests de concurrencia)
-- [ ] Fase 3: pagos (sandbox) y reseñas
+- [x] Fase 2: disponibilidad y reservas (tests de concurrencia)
+- [x] Fase 3: pagos (Culqi sandbox) y reseñas
 - [ ] Fase 4: chat en tiempo real y eventos por RabbitMQ
 - [ ] Fase 5: matchmaking (partidos abiertos)
 - [ ] Fase 6: pulido, demo desplegada y capturas

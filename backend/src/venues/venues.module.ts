@@ -1,13 +1,14 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from '../auth/auth.module';
+import { Review } from '../reviews/review.entity';
 import { Court } from './court.entity';
 import { Venue } from './venue.entity';
 import { CourtsController, VenuesController } from './venues.controller';
 import { VenuesService } from './venues.service';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Venue, Court]), AuthModule],
+  imports: [TypeOrmModule.forFeature([Venue, Court, Review]), AuthModule],
   controllers: [VenuesController, CourtsController],
   providers: [VenuesService],
 })

@@ -7,6 +7,7 @@ import {
   ManyToOne,
   PrimaryGeneratedColumn,
 } from 'typeorm';
+import { numericTransformer } from '../common/numeric.transformer';
 import { Sport } from './sport.enum';
 import { Venue } from './venue.entity';
 
@@ -36,9 +37,17 @@ export class Court {
     precision: 10,
     scale: 2,
     name: 'price_per_hour',
-    transformer: { to: (v: number) => v, from: (v: string) => Number(v) },
+    transformer: numericTransformer,
   })
   pricePerHour!: number;
+
+  // Horario de atención en hora local (ver bookings/local-time.ts): abre en openHour
+  // y la última reserva termina como tarde a closeHour. Por defecto 08:00-23:00.
+  @Column({ name: 'open_hour', type: 'smallint', default: 8 })
+  openHour!: number;
+
+  @Column({ name: 'close_hour', type: 'smallint', default: 23 })
+  closeHour!: number;
 
   @Column({ name: 'is_active', default: true })
   isActive!: boolean;

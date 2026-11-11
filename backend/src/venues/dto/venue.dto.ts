@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
+  IsBoolean,
   IsEnum,
   IsInt,
   IsLatitude,
@@ -70,8 +71,23 @@ export class CreateCourtDto {
   @Max(100000)
   pricePerHour!: number;
 
+  @ApiPropertyOptional({ default: 8, description: 'Hora local de apertura (0-23)' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(23)
+  openHour?: number;
+
+  @ApiPropertyOptional({ default: 23, description: 'Hora local de cierre (1-24); la última reserva termina a esta hora' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(24)
+  closeHour?: number;
+
   @ApiPropertyOptional({ default: true })
   @IsOptional()
+  @IsBoolean()
   isActive?: boolean;
 }
 
