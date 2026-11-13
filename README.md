@@ -30,6 +30,38 @@ Consume eventos de RabbitMQ y valida el mismo JWT, sin llamadas síncronas al mo
 
 > Por qué el chat es un servicio aparte: ver [ADR 0001](docs/adr/0001-separar-chat-como-microservicio.md).
 
+### Cómo se conectan: eventos de reservas
+
+Al confirmar el pago de una reserva (o cancelar una ya confirmada), el monolito guarda un evento en una tabla
+`outbox_events` **en la misma transacción**; un relevo lo publica en RabbitMQ (`canchaya.events`, claves
+`booking.confirmed` / `booking.cancelled`) y el chat abre o cierra la sala de esa reserva. Si RabbitMQ se cae,
+los eventos esperan en la tabla y se entregan después; el consumidor es idempotente y los mensajes inválidos van
+a una cola de muertos. Detalle en el [ADR 0004](docs/adr/0004-eventos-con-bandeja-de-salida-y-chat-por-reserva.md)
+y el contrato en [`docs/contracts/`](docs/contracts/README.md).
+
+#### Chat grupal de cada partido
+
+Al abrir un partido, el chat crea la sala `match:<id>` con el organizador; quien se une entra a ella y quien sale
+deja de recibir mensajes al instante. Cancelar el partido o su reserva cierra la sala (el historial se conserva).
+Cada evento trae el estado completo y una versión, así que el orden de llegada no importa: ver el
+[ADR 0006](docs/adr/0006-chat-grupal-por-partido-con-instantaneas-versionadas.md). Los avisos ("Luis se unió al
+partido") son mensajes con `kind: "system"`.
+
+### API del chat (puerto 3002)
+
+REST (con `Authorization: Bearer <JWT>`): `GET /rooms` (mis conversaciones, de reservas y de partidos; cada sala trae `kind`, `memberIds` y `members`) y
+`GET /rooms/:id/messages?limit=50&before=<id>` (historial paginado hacia atrás).
+
+Socket.IO (el JWT va en `auth: { token }` al conectar; cada evento admite un `ack`):
+
+| Cliente → servidor | Respuesta |
+|---|---|
+| `room:join` `roomId` | `{ ok, room, messages (últimos 50), online }` o `{ ok:false, error }` |
+| `room:leave` `roomId` | `{ ok }` |
+| `message:send` `{ roomId, text }` | `{ ok, message }`; errores: `invalid_message`, `not_joined`, `rate_limited`, `room_closed`, `forbidden` |
+
+Servidor → cliente: `message:new`, `presence:update`, `room:opened`, `room:closed` y `room:left` (te sacaron de una sala de partido porque saliste).
+
 ## Stack
 
 | Capa | Tecnología |
@@ -55,6 +87,14 @@ docker compose up --build
 | RabbitMQ UI | http://localhost:15672 |
 | Swagger (API del monolito) | http://localhost:3001/api |
 
+### Interfaz web (`frontend/`, puerto 3000)
+
+Next.js 14 (App Router) + Tailwind, tema oscuro. Pantallas: inicio, canchas, detalle de cancha con tablero de turnos (1 a 3 horas seguidas), pago, mis reservas (cancelar, buscar jugadores, reseñar), partidos abiertos y registro/ingreso.
+
+- Los datos se piden desde el navegador a `NEXT_PUBLIC_API_URL`; la sesión (JWT) se guarda en `localStorage`. Es lo más simple para una demo; en producción convendría una cookie `httpOnly`.
+- Pago: por defecto modo demostración con los tokens de la pasarela simulada. Con `NEXT_PUBLIC_PAYMENT_MODE=culqi` y `NEXT_PUBLIC_CULQI_PUBLIC_KEY` se tokeniza la tarjeta con Culqi (ruta aún no probada contra el servicio real).
+- Tras cambiar dependencias o archivos de configuración: `docker compose up -d --build frontend`.
+
 ## API del monolito
 
 El esquema de PostgreSQL lo crean las migraciones de TypeORM al arrancar (nunca `synchronize`).
@@ -78,6 +118,13 @@ El esquema de PostgreSQL lo crean las migraciones de TypeORM al arrancar (nunca 
 | `GET /bookings/mine` | jugador o dueño | Mis reservas con su cancha y local |
 | `GET /venues/:id/bookings?date=` | dueño del local o admin | Agenda del local (nombre del jugador, sin datos de contacto) |
 | `GET /payments/mine` | jugador o dueño | Mis pagos con su reserva |
+| `POST /matches` | jugador o dueño | Abre un partido con una reserva confirmada tuya: `{ bookingId, spots (1-20), level?, notes? }` |
+| `GET /matches` | público | Partidos abiertos con lugares libres. Filtros: `sport`, `level`, `zone`, `date`, `page`, `limit` |
+| `GET /matches/:id` | público | Detalle con lista de jugadores (solo primer nombre) |
+| `GET /matches/mine` | jugador o dueño | Los que organizo y a los que me uní (`role`) |
+| `POST /matches/:id/join` | jugador o dueño | Ocupa un lugar (`409` si está completo, ya empezó o ya estás dentro) |
+| `POST /matches/:id/leave` | jugador o dueño | Libera mi lugar |
+| `DELETE /matches/:id` | organizador o admin | Cierra el partido (cancelar la reserva también lo cierra) |
 | `POST /payments/:id/retry-refund` | admin | Reintenta una devolución que la pasarela rechazó |
 | `POST /payments/webhooks/culqi/:secret` | Culqi | Concilia cobros cuya respuesta se perdió (el secreto va en la URL) |
 | `POST /bookings/:id/review` | jugador de la reserva | Reseña (`rating` 1-5, `comment` opcional). Solo reservas confirmadas que ya terminaron, una por reserva |
@@ -123,7 +170,10 @@ Los tests de integración (`*.concurrency.spec.ts`, `*.flow.spec.ts`) corren con
 concurrencia dispara decenas de reservas simultáneas por el mismo horario y comprueba que solo una gana; el de
 pagos cubre doble clic, rechazos, pasarela caída, webhook y devoluciones; el de reseñas, sus reglas. Cada archivo
 crea y borra su propia base `canchaya_test_*` en el mismo servidor, sin tocar tus datos, y se omite si no hay
-`DATABASE_URL`.
+`DATABASE_URL`. El chat-service tiene sus propios tests (`cd chat-service && npm test`; el de MongoDB se activa
+definiendo `MONGO_URL`). La prueba de punta a punta del stack completo es
+`docker compose exec chat-service npx tsx scripts/e2e.ts`: registra usuarios, reserva, paga, espera a que el evento
+llegue por RabbitMQ, chatea por Socket.IO y cancela.
 
 ## Roadmap
 
@@ -131,9 +181,11 @@ crea y borra su propia base `canchaya_test_*` en el mismo servidor, sin tocar tu
 - [x] Fase 1: auth, roles y modelo de datos
 - [x] Fase 2: disponibilidad y reservas (tests de concurrencia)
 - [x] Fase 3: pagos (Culqi sandbox) y reseñas
-- [ ] Fase 4: chat en tiempo real y eventos por RabbitMQ
-- [ ] Fase 5: matchmaking (partidos abiertos)
-- [ ] Fase 6: pulido, demo desplegada y capturas
+- [x] Fase 4: chat en tiempo real y eventos por RabbitMQ
+- [x] Fase 5a: matchmaking (partidos abiertos, cupo atómico) — ver [ADR 0005](docs/adr/0005-partidos-abiertos-con-cupo-atomico.md)
+- [x] Fase 6a: interfaz web del jugador (buscar, reservar, pagar, partidos abiertos, reseñas)
+- [x] Fase 5b: chat grupal por partido — ver [ADR 0006](docs/adr/0006-chat-grupal-por-partido-con-instantaneas-versionadas.md)
+- [ ] Fase 6b: panel del dueño, chat en la interfaz, demo desplegada y capturas
 
 ## Estructura
 

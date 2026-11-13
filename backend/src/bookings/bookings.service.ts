@@ -10,10 +10,14 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Brackets, Repository } from 'typeorm';
+import { Brackets, In, Repository } from 'typeorm';
 import { AuthUser } from '../auth/auth-user';
 import { PG_EXCLUSION_VIOLATION, pgErrorCode } from '../common/db-errors';
+import { enqueueBookingEvent } from '../events/outbox';
 import { PaymentsService } from '../payments/payments.service';
+import { MatchStatus } from '../matches/match-status.enum';
+import { Review } from '../reviews/review.entity';
+import { Match } from '../matches/match.entity';
 import { Role } from '../users/role.enum';
 import { Court } from '../venues/court.entity';
 import { Venue } from '../venues/venue.entity';
@@ -181,6 +185,16 @@ export class BookingsService implements OnModuleInit, OnModuleDestroy {
       relations: { court: { venue: true } },
       order: { startsAt: 'DESC' },
     });
+    // Para que la interfaz sepa qué ofrecer en cada reserva: si ya busca jugadores y si ya fue reseñada.
+    const ids = rows.map((b) => b.id);
+    const [matchRows, reviewRows] = ids.length
+      ? await Promise.all([
+          this.bookings.manager.find(Match, { where: { bookingId: In(ids) }, select: { id: true, bookingId: true, status: true } }),
+          this.bookings.manager.find(Review, { where: { bookingId: In(ids) }, select: { bookingId: true } }),
+        ])
+      : [[], []];
+    const matchByBooking = new Map(matchRows.filter((m) => m.status === MatchStatus.Open).map((m) => [m.bookingId, m.id]));
+    const reviewed = new Set(reviewRows.map((r) => r.bookingId));
     return rows.map((b) => ({
       id: b.id,
       status: this.effectiveStatus(b),
@@ -188,6 +202,8 @@ export class BookingsService implements OnModuleInit, OnModuleDestroy {
       endsAt: b.endsAt,
       totalPrice: b.totalPrice,
       expiresAt: b.expiresAt,
+      matchId: matchByBooking.get(b.id) ?? null,
+      reviewed: reviewed.has(b.id),
       court: { id: b.court.id, name: b.court.name, sport: b.court.sport },
       venue: {
         id: b.court.venue.id,
@@ -258,17 +274,21 @@ export class BookingsService implements OnModuleInit, OnModuleDestroy {
       throw new ConflictException(`Solo puedes cancelar hasta ${MIN_CANCEL_HOURS} horas antes del inicio`);
     }
 
-    const result = await this.bookings
-      .createQueryBuilder()
-      .update(Booking)
-      .set({ status: BookingStatus.Cancelled, expiresAt: null })
-      .where('id = :id', { id })
-      .andWhere('status IN (:...active)', {
-        active: [BookingStatus.Pending, BookingStatus.Confirmed],
-      })
-      .execute();
-
-    if (!result.affected) throw new ConflictException('La reserva cambió de estado, vuelve a intentarlo');
+    await this.bookings.manager.transaction(async (manager) => {
+      // Se bloquea la reserva y se lee su estado real: el pago (que también la bloquea) no puede
+      // confirmarla a mitad de la cancelación, y el evento depende del estado del que se parte.
+      const current = await manager.findOne(Booking, { where: { id }, lock: { mode: 'pessimistic_write' } });
+      if (!current || (current.status !== BookingStatus.Pending && current.status !== BookingStatus.Confirmed)) {
+        throw new ConflictException('La reserva cambió de estado, vuelve a intentarlo');
+      }
+      await manager.update(Booking, { id }, { status: BookingStatus.Cancelled, expiresAt: null });
+      // Si buscaba jugadores, el partido se cierra en la misma transacción: nadie puede unirse a una cancha cancelada.
+      await manager.update(Match, { bookingId: id, status: MatchStatus.Open }, { status: MatchStatus.Cancelled });
+      // Solo una reserva que ya se había confirmado (y anunciado) necesita aviso de cancelación.
+      if (current.status === BookingStatus.Confirmed) {
+        await enqueueBookingEvent(manager, 'booking.cancelled', id);
+      }
+    });
 
     // Si estaba pagada se devuelve el dinero completo. La reserva ya quedó cancelada pase lo que
     // pase: si la devolución falla queda registrada como refund_failed y un admin la reintenta.

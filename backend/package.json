@@ -21,6 +21,7 @@
     "@nestjs/platform-express": "^10.4.0",
     "@nestjs/swagger": "^7.4.0",
     "@nestjs/typeorm": "^10.0.2",
+    "amqplib": "^0.10.9",
     "bcryptjs": "^2.4.3",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
@@ -32,6 +33,7 @@
   "devDependencies": {
     "@nestjs/cli": "^10.4.0",
     "@nestjs/testing": "^10.4.0",
+    "@types/amqplib": "^0.10.8",
     "@types/bcryptjs": "^2.4.6",
     "@types/jest": "^29.5.12",
     "@types/node": "^20.14.0",
@@ -42,10 +44,16 @@
     "typescript": "^5.5.0"
   },
   "jest": {
-    "moduleFileExtensions": ["js", "json", "ts"],
+    "moduleFileExtensions": [
+      "js",
+      "json",
+      "ts"
+    ],
     "rootDir": "src",
     "testRegex": ".*\\.spec\\.ts$",
-    "transform": { "^.+\\.ts$": "ts-jest" },
+    "transform": {
+      "^.+\\.ts$": "ts-jest"
+    },
     "testEnvironment": "node"
   }
 }

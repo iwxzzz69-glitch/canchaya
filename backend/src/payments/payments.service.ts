@@ -17,6 +17,7 @@ import { AuthUser } from '../auth/auth-user';
 import { BookingStatus } from '../bookings/booking-status.enum';
 import { Booking } from '../bookings/booking.entity';
 import { PG_DEADLOCK_DETECTED, PG_UNIQUE_VIOLATION, pgErrorCode } from '../common/db-errors';
+import { enqueueBookingEvent } from '../events/outbox';
 import { PaymentStatus } from './payment-status.enum';
 import { Payment } from './payment.entity';
 import {
@@ -184,7 +185,11 @@ export class PaymentsService {
         .where('id = :bookingId', { bookingId: payment.bookingId })
         .andWhere('status = :pending', { pending: BookingStatus.Pending })
         .execute();
-      if (confirmed.affected) return 'confirmed' as const;
+      if (confirmed.affected) {
+        // El aviso para el chat sale en la misma transacción: o se confirma y se anuncia, o ninguna.
+        await enqueueBookingEvent(manager, 'booking.confirmed', payment.bookingId);
+        return 'confirmed' as const;
+      }
 
       // Se cobró pero la reserva ya no existe como pendiente: hay que devolver el dinero.
       await manager.update(Payment, { id: paymentId }, { status: PaymentStatus.RefundPending });

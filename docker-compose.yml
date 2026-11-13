@@ -52,6 +52,7 @@ services:
       - "3001:3001"
     volumes:
       - ./backend/src:/app/src
+      - ./docs:/docs:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -70,6 +71,9 @@ services:
       - "3002:3002"
     volumes:
       - ./chat-service/src:/app/src
+      - ./chat-service/scripts:/app/scripts
+      - ./chat-service/test:/app/test
+      - ./docs:/docs:ro
     depends_on:
       rabbitmq:
         condition: service_healthy

@@ -35,7 +35,11 @@ describe('BookingsService (reglas, sin base de datos)', () => {
     findOne: jest.Mock;
     findOneOrFail: jest.Mock;
     createQueryBuilder: jest.Mock;
+    manager: { transaction: jest.Mock };
   };
+  // Lo que ve el código dentro de la transacción de cancelar: la fila bloqueada y la bandeja de eventos.
+  let tx: { findOne: jest.Mock; update: jest.Mock; findOneOrFail: jest.Mock; create: jest.Mock; save: jest.Mock };
+  let lockedRow: { id: string; status: BookingStatus } | null;
   let courts: { findOne: jest.Mock };
   let payments: { refundForBooking: jest.Mock };
   let updateResult: { affected: number };
@@ -56,6 +60,18 @@ describe('BookingsService (reglas, sin base de datos)', () => {
       findOne: jest.fn(),
       findOneOrFail: jest.fn(async () => ({ id: 'b-1' })),
       createQueryBuilder: jest.fn(() => qb),
+      manager: { transaction: jest.fn(async (fn: (m: unknown) => unknown) => fn(tx)) },
+    };
+    lockedRow = null;
+    tx = {
+      findOne: jest.fn(async () => lockedRow),
+      update: jest.fn(async () => undefined),
+      findOneOrFail: jest.fn(async () => ({
+        id: 'b-1', courtId: 'court-1', playerId: 'player-1', startsAt: new Date(), endsAt: new Date(),
+        court: { name: 'Cancha 1', venueId: 'v-1', venue: { name: 'Local', ownerId: 'owner-1' } },
+      })),
+      create: jest.fn((_entity: unknown, v: unknown) => v),
+      save: jest.fn(async (v: unknown) => v),
     };
     courts = { findOne: jest.fn(async () => ({ ...court })) };
     payments = { refundForBooking: jest.fn(async () => 'none') };
@@ -161,6 +177,34 @@ describe('BookingsService (reglas, sin base de datos)', () => {
     it('si no tiene permiso, no se toca el reembolso', async () => {
       bookings.findOne.mockResolvedValue(booking({}));
       await expect(service.cancel(stranger, 'b-1')).rejects.toBeInstanceOf(ForbiddenException);
+      expect(payments.refundForBooking).not.toHaveBeenCalled();
+    });
+
+    // Por defecto la fila bloqueada coincide con la reserva que leyó el servicio.
+    beforeEach(() => {
+      lockedRow = { id: 'b-1', status: BookingStatus.Confirmed };
+    });
+
+    it('cancelar una reserva confirmada deja el evento booking.cancelled en la bandeja', async () => {
+      bookings.findOne.mockResolvedValue(booking({}));
+      await service.cancel(player, 'b-1');
+      expect(tx.update).toHaveBeenCalledWith(Booking, { id: 'b-1' }, { status: BookingStatus.Cancelled, expiresAt: null });
+      expect(tx.save).toHaveBeenCalledWith(expect.objectContaining({ type: 'booking.cancelled' }));
+    });
+
+    it('soltar un bloqueo sin pagar no genera evento (nunca se anunció)', async () => {
+      lockedRow = { id: 'b-1', status: BookingStatus.Pending };
+      bookings.findOne.mockResolvedValue(booking({ status: BookingStatus.Pending, expiresAt: new Date(Date.now() + 60_000) }));
+      await service.cancel(player, 'b-1');
+      expect(tx.update).toHaveBeenCalled();
+      expect(tx.save).not.toHaveBeenCalled();
+    });
+
+    it('si la reserva cambió de estado mientras tanto, responde 409 y no cancela ni reembolsa', async () => {
+      bookings.findOne.mockResolvedValue(booking({}));
+      lockedRow = { id: 'b-1', status: BookingStatus.Cancelled };
+      await expect(service.cancel(player, 'b-1')).rejects.toBeInstanceOf(ConflictException);
+      expect(tx.update).not.toHaveBeenCalled();
       expect(payments.refundForBooking).not.toHaveBeenCalled();
     });
 
