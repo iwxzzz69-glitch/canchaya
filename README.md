@@ -1,4 +1,4 @@
-# CanchaYa ⚽
+# CanchaYa 
 
 Marketplace de reservas de canchas deportivas con chat y matchmaking en tiempo real.
 Proyecto de portafolio con arquitectura **monolito modular + microservicio**.
