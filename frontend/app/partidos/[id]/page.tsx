@@ -63,6 +63,7 @@ export default function MatchPage() {
         {open && !role && <button className="btn-lamp" disabled={busy || m.spotsLeft === 0}
           onClick={() => act(`/matches/${id}/join`, 'POST', '¡Estás dentro! Nos vemos en la cancha.', { 409: 'Ya no quedan lugares o no puedes unirte a este partido.' })}>
           {m.spotsLeft === 0 ? 'Partido completo' : user ? 'Unirme al partido' : 'Ingresa para unirte'}</button>}
+        {role && <Link href={`/chat/${encodeURIComponent(`match:${id}`)}`} className="btn-lamp">Chat del partido</Link>}
         {open && role && <span className="self-center text-free">{role === 'organizer' ? 'Tú organizas este partido' : 'Estás en este partido'}</span>}
       </div>
     </div>

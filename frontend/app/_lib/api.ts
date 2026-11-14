@@ -1,6 +1,7 @@
 import type { Session } from './types';
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+export const CHAT_URL = process.env.NEXT_PUBLIC_CHAT_URL ?? 'http://localhost:3002';
 const KEY = 'canchaya.session';
 
 export class ApiError extends Error {
@@ -34,13 +35,13 @@ function messageOf(body: unknown, fallback: string): string {
   return Array.isArray(m) ? m.join('. ') : m ?? fallback;
 }
 
-export async function api<T>(path: string, opts: { method?: string; body?: unknown; auth?: boolean } = {}): Promise<T> {
+export async function api<T>(path: string, opts: { method?: string; body?: unknown; auth?: boolean; base?: string } = {}): Promise<T> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   const session = sessionStore.read();
   if (session && opts.auth !== false) headers.Authorization = `Bearer ${session.accessToken}`;
   let res: Response;
   try {
-    res = await fetch(API_URL + path, {
+    res = await fetch((opts.base ?? API_URL) + path, {
       method: opts.method ?? 'GET',
       headers,
       body: opts.body === undefined ? undefined : JSON.stringify(opts.body),

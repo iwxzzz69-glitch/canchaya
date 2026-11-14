@@ -6,7 +6,7 @@ export type BookingStatus = 'pending' | 'confirmed' | 'cancelled' | 'expired';
 export interface User { id: string; email: string; name: string; role: Role }
 export interface Session { accessToken: string; user: User }
 
-export interface Court { id: string; name: string; sport: Sport; pricePerHour: number; openHour: number; closeHour: number }
+export interface Court { id: string; name: string; sport: Sport; pricePerHour: number; openHour: number; closeHour: number; isActive?: boolean }
 export interface Rating { average: number | null; count: number }
 export interface Venue { id: string; name: string; description: string | null; address: string; zone: string; courts: Court[]; rating: Rating }
 export interface Page<T> { data: T[]; total: number; page: number; limit: number }
@@ -34,3 +34,25 @@ export interface Review { id: string; rating: number; comment: string | null; au
 export interface ReviewPage { data: Review[]; total: number; average: number | null }
 
 export interface PaymentResult { booking: { id: string; status: BookingStatus }; payment: { id: string; status: string; amount: number } }
+
+export interface RoomMember { id: string; name: string }
+export interface Room {
+  id: string;
+  kind: 'booking' | 'match';
+  status: 'open' | 'closed';
+  playerId: string;
+  ownerId: string | null;
+  memberIds: string[];
+  members: RoomMember[];
+  venueName: string;
+  courtName: string;
+  startsAt: string;
+  endsAt: string;
+}
+export interface ChatMessage { id: string; roomId: string; senderId: string; kind: 'user' | 'system'; text: string; createdAt: string }
+
+export interface AgendaBooking {
+  id: string; status: BookingStatus; startsAt: string; endsAt: string; totalPrice: number; expiresAt: string | null;
+  court: { id: string; name: string; sport: Sport };
+  player: { id: string; name: string };
+}

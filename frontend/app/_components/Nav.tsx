@@ -7,20 +7,29 @@ import { Logo } from './Logo';
 const LINKS = [
   { href: '/canchas', label: 'Canchas', icon: 'M3 6h18v12H3zM12 6v12M12 9.5a2.5 2.5 0 100 5 2.5 2.5 0 000-5z' },
   { href: '/partidos', label: 'Partidos', icon: 'M8 11a3 3 0 100-6 3 3 0 000 6zM16 12a2.5 2.5 0 100-5 2.5 2.5 0 000 5zM2.5 19c0-3 2.5-5 5.5-5s5.5 2 5.5 5M14.5 14.5c3 0 5 1.6 5 4' },
+  { href: '/chat', label: 'Chat', icon: 'M4 5h16v11H9l-5 4zM8 9h8M8 12h5' },
   { href: '/reservas', label: 'Mis reservas', icon: 'M5 4h14v16H5zM9 9h6M9 13h6M9 17h3' },
 ];
 
+// Quien tiene canchas no reserva ni arma partidos: ve su panel, las canchas (como las ve el público) y el chat.
+const OWNER_LINKS = [
+  { href: '/panel', label: 'Mi panel', icon: 'M3 4h7v7H3zM14 4h7v4h-7zM14 12h7v8h-7zM3 15h7v5H3z' },
+  LINKS[0],
+  LINKS[2],
+];
+const useLinks = () => (useSession().user?.role === 'owner' ? OWNER_LINKS : LINKS);
 const active = (path: string, href: string) => path === href || path.startsWith(href + '/');
 
 export function Header() {
   const path = usePathname();
+  const links = useLinks();
   const { user, ready, logout } = useSession();
   return (
     <header className="sticky top-0 z-30 border-b bg-night/90 backdrop-blur">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4">
         <Link href="/" aria-label="CanchaYa, inicio"><Logo /></Link>
         <nav aria-label="Principal" className="hidden items-center gap-1 md:flex">
-          {LINKS.map((l) => (
+          {links.map((l) => (
             <Link key={l.href} href={l.href} aria-current={active(path, l.href) ? 'page' : undefined}
               className={`rounded-lg px-4 py-2 transition ${active(path, l.href) ? 'bg-pitch-raised text-chalk' : 'text-mute hover:text-chalk'}`}>
               {l.label}
@@ -48,10 +57,11 @@ export function Header() {
 // En celular la navegación va abajo, al alcance del pulgar, como en una app.
 export function BottomNav() {
   const path = usePathname();
+  const links = useLinks();
   return (
     <nav aria-label="Principal" className="fixed inset-x-0 bottom-0 z-30 border-t bg-night/95 backdrop-blur md:hidden">
-      <ul className="mx-auto grid max-w-md grid-cols-3">
-        {LINKS.map((l) => {
+      <ul className={`mx-auto grid max-w-md ${links.length === 3 ? 'grid-cols-3' : 'grid-cols-4'}`}>
+        {links.map((l) => {
           const on = active(path, l.href);
           return (
             <li key={l.href}>

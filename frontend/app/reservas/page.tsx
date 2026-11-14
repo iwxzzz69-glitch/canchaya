@@ -60,6 +60,7 @@ function Content() {
               <div className="flex flex-wrap gap-2 sm:justify-end">
                 {b.status === 'pending' && <Link href={`/reservas/${b.id}`} className="btn-lamp">Pagar</Link>}
                 {b.status === 'confirmed' && !finished && !b.matchId && <button className="btn-line" onClick={() => setRecruit(b)}>Buscar jugadores</button>}
+                {b.status === 'confirmed' && <Link href={`/chat/${b.id}`} className="btn-line">Chat con el local</Link>}
                 {b.matchId && <Link href={`/partidos/${b.matchId}`} className="btn-line">Ver partido</Link>}
                 {finished && !b.reviewed && <button className="btn-line" onClick={() => setReview(b)}>Reseñar</button>}
                 {finished && b.reviewed && <span className="self-center text-sm text-mute">Ya la reseñaste</span>}

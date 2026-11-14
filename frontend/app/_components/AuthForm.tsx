@@ -14,6 +14,7 @@ function Form({ mode }: { mode: 'login' | 'registro' }) {
   const safeNext = next && next.startsWith('/') && !next.startsWith('//') ? next : '/canchas';
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [role, setRole] = useState<'player' | 'owner'>('player');
   const isLogin = mode === 'login';
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
@@ -22,8 +23,8 @@ function Form({ mode }: { mode: 'login' | 'registro' }) {
     setBusy(true); setError('');
     try {
       if (isLogin) await login(String(f.get('email')), String(f.get('password')));
-      else await register(String(f.get('name')).trim(), String(f.get('email')), String(f.get('password')));
-      router.replace(safeNext);
+      else await register(String(f.get('name')).trim(), String(f.get('email')), String(f.get('password')), role);
+      router.replace(role === 'owner' && !next ? '/panel' : safeNext);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudo completar. Inténtalo de nuevo.');
       setBusy(false);
@@ -38,6 +39,13 @@ function Form({ mode }: { mode: 'login' | 'registro' }) {
         {!isLogin && (
           <div><label className="label" htmlFor="name">Nombre</label>
             <input id="name" name="name" className="field" required minLength={2} maxLength={80} autoComplete="name" /></div>
+        )}
+        {!isLogin && (
+          <div><span className="label" id="role">¿Cómo vas a usar CanchaYa?</span>
+            <div role="radiogroup" aria-labelledby="role" className="flex flex-wrap gap-2">
+              <button type="button" role="radio" aria-checked={role === 'player'} className="chip" aria-pressed={role === 'player'} onClick={() => setRole('player')}>Quiero jugar</button>
+              <button type="button" role="radio" aria-checked={role === 'owner'} className="chip" aria-pressed={role === 'owner'} onClick={() => setRole('owner')}>Tengo canchas</button>
+            </div></div>
         )}
         <div><label className="label" htmlFor="email">Correo</label>
           <input id="email" name="email" type="email" className="field" required autoComplete="email" /></div>

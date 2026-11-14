@@ -87,13 +87,36 @@ docker compose up --build
 | RabbitMQ UI | http://localhost:15672 |
 | Swagger (API del monolito) | http://localhost:3001/api |
 
+> **Windows y Docker Desktop:** el reinicio automático (`tsx watch`, `nest start --watch`) no detecta los cambios de
+> las carpetas montadas. Tras actualizar el código, ejecuta `docker compose restart backend chat-service` (o
+> `docker compose up -d --build <servicio>` si cambiaron dependencias) y comprueba el log: el chat debe decir
+> "Consumidor de eventos conectado a RabbitMQ" y `rabbitmqctl list_queues` debe mostrar `chat.bookings` y `chat.matches`.
+
 ### Interfaz web (`frontend/`, puerto 3000)
 
-Next.js 14 (App Router) + Tailwind, tema oscuro. Pantallas: inicio, canchas, detalle de cancha con tablero de turnos (1 a 3 horas seguidas), pago, mis reservas (cancelar, buscar jugadores, reseñar), partidos abiertos y registro/ingreso.
+Next.js 14 (App Router) + Tailwind, tema oscuro. Pantallas: inicio, canchas, detalle de cancha con tablero de turnos (1 a 3 horas seguidas), pago, mis reservas (cancelar, buscar jugadores, reseñar), partidos abiertos, registro/ingreso (jugador o dueño), **panel del dueño** (locales, canchas con su horario, activar/desactivar, agenda por día) y **chat en tiempo real** (con el local de cada reserva y con los jugadores de cada partido; se conecta por Socket.IO a `NEXT_PUBLIC_CHAT_URL`).
 
 - Los datos se piden desde el navegador a `NEXT_PUBLIC_API_URL`; la sesión (JWT) se guarda en `localStorage`. Es lo más simple para una demo; en producción convendría una cookie `httpOnly`.
 - Pago: por defecto modo demostración con los tokens de la pasarela simulada. Con `NEXT_PUBLIC_PAYMENT_MODE=culqi` y `NEXT_PUBLIC_CULQI_PUBLIC_KEY` se tokeniza la tarjeta con Culqi (ruta aún no probada contra el servicio real).
 - Tras cambiar dependencias o archivos de configuración: `docker compose up -d --build frontend`.
+
+### Demo con datos de ejemplo
+
+Con el backend en modo `PAYMENT_PROVIDER=fake`, carga 4 locales, 7 canchas, 5 jugadores, reservas pagadas y 3 partidos abiertos:
+
+```powershell
+$env:API_URL="http://localhost:3001"; node scripts/seed-demo.mjs
+```
+
+Cuentas (clave `Clave12345`): dueño `dueno@demo.pe`; jugadores `ana@`, `luis@`, `marta@`, `diego@`, `camila@demo.pe`. Si la demo ya existe, el script no hace nada.
+
+| | |
+|---|---|
+| ![Inicio](docs/screenshots/01-inicio.png) | ![Turnos](docs/screenshots/03-cancha-turnos.png) |
+| ![Partido](docs/screenshots/05-partido.png) | ![Pago](docs/screenshots/06-pago.png) |
+| ![Chat con el local](docs/screenshots/08-chat-local.png) | ![Panel del dueño](docs/screenshots/12-panel-reservas.png) |
+
+Móvil: ![Inicio móvil](docs/screenshots/13-inicio-movil.png) ![Chat de partido](docs/screenshots/09-chat-partido-movil.png)
 
 ## API del monolito
 
@@ -185,7 +208,8 @@ llegue por RabbitMQ, chatea por Socket.IO y cancela.
 - [x] Fase 5a: matchmaking (partidos abiertos, cupo atómico) — ver [ADR 0005](docs/adr/0005-partidos-abiertos-con-cupo-atomico.md)
 - [x] Fase 6a: interfaz web del jugador (buscar, reservar, pagar, partidos abiertos, reseñas)
 - [x] Fase 5b: chat grupal por partido — ver [ADR 0006](docs/adr/0006-chat-grupal-por-partido-con-instantaneas-versionadas.md)
-- [ ] Fase 6b: panel del dueño, chat en la interfaz, demo desplegada y capturas
+- [x] Fase 6b: panel del dueño, chat en la interfaz, datos de demo y capturas
+- [ ] Pendiente: demo desplegada (hosting)
 
 ## Estructura
 

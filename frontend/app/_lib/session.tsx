@@ -7,7 +7,7 @@ interface Ctx {
   user: User | null;
   ready: boolean; // false hasta leer localStorage: evita mostrar "Ingresar" un instante a quien ya tiene sesión
   login(email: string, password: string): Promise<void>;
-  register(name: string, email: string, password: string): Promise<void>;
+  register(name: string, email: string, password: string, role?: 'player' | 'owner'): Promise<void>;
   logout(): void;
 }
 const SessionContext = createContext<Ctx | null>(null);
@@ -40,8 +40,8 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       async login(email, password) {
         start(await api<Session>('/auth/login', { method: 'POST', body: { email, password }, auth: false }));
       },
-      async register(name, email, password) {
-        start(await api<Session>('/auth/register', { method: 'POST', body: { name, email, password, role: 'player' }, auth: false }));
+      async register(name, email, password, role = 'player') {
+        start(await api<Session>('/auth/register', { method: 'POST', body: { name, email, password, role }, auth: false }));
       },
       logout() {
         sessionStore.write(null);
