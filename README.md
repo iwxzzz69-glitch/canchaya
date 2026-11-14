@@ -209,7 +209,7 @@ llegue por RabbitMQ, chatea por Socket.IO y cancela.
 - [x] Fase 6a: interfaz web del jugador (buscar, reservar, pagar, partidos abiertos, reseñas)
 - [x] Fase 5b: chat grupal por partido — ver [ADR 0006](docs/adr/0006-chat-grupal-por-partido-con-instantaneas-versionadas.md)
 - [x] Fase 6b: panel del dueño, chat en la interfaz, datos de demo y capturas
-- [ ] Pendiente: demo desplegada (hosting)
+- [ ] Demo desplegada: guía en [docs/DEPLOY.md](docs/DEPLOY.md)
 
 ## Estructura
 

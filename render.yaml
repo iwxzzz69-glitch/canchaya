@@ -1,0 +1,34 @@
+# Blueprint de Render (plan gratuito). Los valores con sync:false se piden al crear el blueprint.
+services:
+  - type: web
+    name: canchaya-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./backend/Dockerfile.prod
+    dockerContext: ./backend
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL        # Neon, con ?sslmode=require
+        sync: false
+      - key: RABBITMQ_URL        # CloudAMQP (amqps://...)
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: PAYMENT_PROVIDER    # demo: pasarela simulada (no se cobra nada). NO definir NODE_ENV=production.
+        value: fake
+  - type: web
+    name: canchaya-chat
+    runtime: docker
+    plan: free
+    dockerfilePath: ./chat-service/Dockerfile.prod
+    dockerContext: ./chat-service
+    healthCheckPath: /health
+    envVars:
+      - key: MONGO_URL           # MongoDB Atlas (mongodb+srv://...)
+        sync: false
+      - key: RABBITMQ_URL
+        sync: false
+      - key: JWT_SECRET          # debe ser IGUAL al de canchaya-api: cópialo a mano tras crear el blueprint
+        sync: false
+      - key: CHAT_CORS_ORIGIN    # URL de Vercel, sin barra final
+        sync: false
